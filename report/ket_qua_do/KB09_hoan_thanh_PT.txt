@@ -1,0 +1,119 @@
+/* KB09_hoan_thanh_PT.sql  —  Vấn đề 5: chốt hoa hồng đúng chi nhánh khi PT đã điều chuyển
+   KB09 khác KB05/KB06: thứ cần so sánh là TÍNH ĐÚNG, không phải tốc độ.
+   Bảng LICH_SU_CONG_TAC chỉ vài trăm dòng và đã có khóa chính (MaNV, TuNgay) để Seek,
+   nên không cần index mới. Báo cáo nên nói rõ điều này thay vì cố tạo index cho có.
+*/
+USE FitLifeHub;
+
+Changed database context to 'FitLifeHub'.
+
+/* ===== PHẦN 1: quy mô sai lệch nếu dùng "chi nhánh hiện tại" như hệ thống cũ =====
+   Với mỗi buổi đã hoàn thành: so chi nhánh dạy đúng (MaCNDay, đã lưu lúc đặt)
+   với chi nhánh hiện tại của PT. */
+SELECT COUNT(*)                                                          AS TongBuoiHoanThanh,
+       SUM(CASE WHEN l.MaCNDay <> ht.MaCN THEN 1 ELSE 0 END)             AS SoBuoiBiGanSaiChiNhanh,
+       SUM(CASE WHEN l.MaCNDay <> ht.MaCN THEN l.TienHoaHongPT ELSE 0 END) AS TienHoaHongBiGanSai
+FROM LICH_HEN_PT l
+JOIN LICH_SU_CONG_TAC ht ON ht.MaNV = l.MaPT AND ht.DenNgay IS NULL   -- "chi nhánh hiện tại"
+WHERE l.TrangThaiLich = 'HOAN_THANH';
+
+-- Chi tiết theo PT bị điều chuyển (dùng làm bảng minh họa trong báo cáo)
+SELECT l.MaPT, l.MaCNDay AS ChiNhanhDayThucTe, ht.MaCN AS ChiNhanhHienTai,
+       COUNT(*) AS SoBuoi, SUM(l.TienHoaHongPT) AS TienHoaHong
+FROM LICH_HEN_PT l
+JOIN LICH_SU_CONG_TAC ht ON ht.MaNV = l.MaPT AND ht.DenNgay IS NULL
+WHERE l.TrangThaiLich = 'HOAN_THANH' AND l.MaCNDay <> ht.MaCN
+GROUP BY l.MaPT, l.MaCNDay, ht.MaCN
+ORDER BY l.MaPT;
+
+TongBuoiHoanThanh SoBuoiBiGanSaiChiNhanh TienHoaHongBiGanSai
+----------------- ---------------------- -------------------
+283569 37209 1674045000.00
+
+(1 rows affected)
+MaPT ChiNhanhDayThucTe ChiNhanhHienTai SoBuoi TienHoaHong
+---- ----------------- --------------- ------ -----------
+NV0004 CN04 CN05 627 28235000.00
+NV0008 CN08 CN09 837 37700000.00
+NV0012 CN12 CN01 1035 46495000.00
+NV0016 CN04 CN05 1220 54890000.00
+NV0020 CN08 CN09 1423 64250000.00
+NV0024 CN12 CN01 1609 72415000.00
+NV0028 CN04 CN05 1839 82615000.00
+NV0032 CN08 CN09 2034 91260000.00
+NV0036 CN12 CN01 508 22875000.00
+NV0040 CN04 CN05 718 32265000.00
+NV0044 CN08 CN09 919 41330000.00
+NV0048 CN12 CN01 1115 50130000.00
+NV0052 CN04 CN05 1301 58660000.00
+NV0056 CN08 CN09 1519 68150000.00
+NV0060 CN12 CN01 1699 76615000.00
+NV0064 CN04 CN05 1907 85710000.00
+NV0068 CN08 CN09 2108 95185000.00
+NV0072 CN12 CN01 586 26435000.00
+NV0076 CN04 CN05 788 35195000.00
+NV0080 CN08 CN09 999 45110000.00
+NV0084 CN12 CN01 1195 53705000.00
+NV0088 CN04 CN05 1400 62760000.00
+NV0092 CN08 CN09 1617 72705000.00
+NV0096 CN12 CN01 1811 81695000.00
+NV0100 CN04 CN05 1973 88405000.00
+NV0104 CN08 CN09 475 21380000.00
+NV0108 CN12 CN01 686 30945000.00
+NV0112 CN04 CN05 899 40590000.00
+NV0116 CN08 CN09 1075 48335000.00
+NV0120 CN12 CN01 1287 58005000.00
+
+(30 rows affected)
+
+/* ===== PHẦN 2: chạy thử 1 buổi bằng v0 và bản tối ưu (đều ROLLBACK, không đổi dữ liệu) =====
+   Chọn 1 buổi của PT đã điều chuyển, diễn ra TRƯỚC ngày điều chuyển. */
+DECLARE @MaLichHen VARCHAR(20) =
+    (SELECT TOP (1) l.MaLichHen
+     FROM LICH_HEN_PT l
+     JOIN LICH_SU_CONG_TAC c ON c.MaNV = l.MaPT AND c.DenNgay IS NOT NULL
+                            AND l.NgayTap BETWEEN c.TuNgay AND c.DenNgay
+     WHERE l.TrangThaiLich = 'HOAN_THANH'
+     ORDER BY l.NgayTap DESC);
+
+SELECT @MaLichHen AS BuoiDungDeThu, MaPT, NgayTap, MaCNDay AS ChiNhanhDayDung
+FROM LICH_HEN_PT WHERE MaLichHen = @MaLichHen;
+
+-- 2a. Bản v0: gán theo chi nhánh hiện tại
+BEGIN TRANSACTION;
+    UPDATE LICH_HEN_PT SET TrangThaiLich = 'DA_DAT', TyLeHoaHongChot = NULL, TienHoaHongPT = NULL
+    WHERE MaLichHen = @MaLichHen;
+    EXEC sp_HoanThanhBuoiPT_v0 @MaLichHen = @MaLichHen;   -- Kỳ vọng: ChiNhanhTinhHoaHong = chi nhánh MỚI (sai)
+ROLLBACK TRANSACTION;
+
+-- 2b. Bản tối ưu: tra lịch sử công tác tại ngày tập, chốt tỷ lệ và tiền
+BEGIN TRANSACTION;
+    UPDATE LICH_HEN_PT SET TrangThaiLich = 'DA_DAT', TyLeHoaHongChot = NULL, TienHoaHongPT = NULL
+    WHERE MaLichHen = @MaLichHen;
+    SET STATISTICS IO ON;
+    EXEC sp_HoanThanhBuoiPT @MaLichHen = @MaLichHen;      -- Kỳ vọng: ChiNhanhTinhHoaHong = chi nhánh CŨ (đúng)
+    SET STATISTICS IO OFF;
+ROLLBACK TRANSACTION;
+-- Trong plan của 2b: Clustered Index Seek trên PK_LICH_SU_CONG_TAC, logical reads 2–3 trang.
+
+BuoiDungDeThu MaPT NgayTap ChiNhanhDayDung
+------------- ---- ------- ---------------
+LH0000282308 NV0068 2026-10-22 CN08
+
+(1 rows affected)
+
+(1 rows affected)
+MaLichHen ChiNhanhTinhHoaHong ThongBao
+--------- ------------------- --------
+LH0000282308 CN09 Đã hoàn thành (bản v0)
+
+(1 rows affected)
+Table 'LICH_HEN_PT'. Scan count 0, logical reads 3, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+Table 'LICH_SU_CONG_TAC'. Scan count 1, logical reads 2, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+Table 'HUAN_LUYEN_VIEN'. Scan count 0, logical reads 2, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+Table 'GOI_DICH_VU'. Scan count 0, logical reads 2, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+Table 'DANG_KY_GOI'. Scan count 0, logical reads 2, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+Table 'LICH_HEN_PT'. Scan count 0, logical reads 9, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+MaLichHen ChiNhanhTinhHoaHong TyLeHoaHongChot TienHoaHongPT ThongBao
+--------- ------------------- --------------- ------------- --------
+LH0000282308 CN08 10.00 50000.00000000 Đã hoàn thành buổi tập

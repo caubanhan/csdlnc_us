@@ -1,0 +1,45 @@
+#### PHẦN TRƯỚC
+-- Bước 1
+ThongBao
+--------
+Đã dọn khung giờ demo
+-- Bước 2 (cửa sổ 1, chờ 10s) chạy nền; sau 3s chạy Bước 3 (cửa sổ 2)
+[cửa sổ 2]
+MaLichHen ThongBao
+--------- --------
+LH0000350413 Đặt lịch thành công (bản v0)
+[cửa sổ 1]
+MaLichHen ThongBao
+--------- --------
+LH0000350414 Đặt lịch thành công (bản v0)
+-- Bước 4
+MaLichHen MaHV MaPT NgayTap GioBatDau TrangThaiLich
+--------- ---- ---- ------- --------- -------------
+LH0000350413 HV000002 NV0001 2026-12-03 07:00:00 DA_DAT
+LH0000350414 HV000001 NV0001 2026-12-03 07:00:00 DA_DAT
+
+(2 rows affected)
+#### PHẦN SAU
+-- Bước 5
+ThongBao
+--------
+Đã dọn khung giờ demo
+-- Bước 6 (cửa sổ 1, chờ 10s) chạy nền; sau 3s chạy Bước 7 (cửa sổ 2)
+[cửa sổ 2]
+Msg 50003, Level 16, State 1, Server 6849235d9dfc, Procedure sp_DatLichPT, Line 47
+PT đã có lịch vào khung giờ này. Vui lòng chọn giờ khác.
+(cửa sổ 2 phải chờ 7 giây)
+[cửa sổ 1]
+MaLichHen ThongBao
+--------- --------
+LH0000350415 Đặt lịch thành công
+-- Bước 8
+MaLichHen MaHV MaPT NgayTap GioBatDau TrangThaiLich
+--------- ---- ---- ------- --------- -------------
+LH0000350415 HV000001 NV0001 2026-12-03 07:00:00 DA_DAT
+
+(1 rows affected)
+-- Bước 9
+Msg 2601, Level 14, State 1, Server 6849235d9dfc, Line 4
+Cannot insert duplicate key row in object 'dbo.LICH_HEN_PT' with unique index 'UX_LICH_HEN_PT_PT_KhungGio'. The duplicate key value is (NV0001, 2026-12-03, 07:00:00).
+The statement has been terminated.

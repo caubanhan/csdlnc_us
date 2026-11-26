@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.bak
+*.mdf
+*.ldf
+.streamlit/secrets.toml
